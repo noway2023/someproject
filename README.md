@@ -2,8 +2,6 @@ record some project
 
 ## from [UCTC_CG](https://github.com/Ubpa/USTC_CG)
 
-## from [UCTC_CG](https://github.com/Ubpa/USTC_CG)
-
 ### minidraw
 
 ![minidraw.png](images/minidraw.png)
@@ -24,7 +22,6 @@ bug images :)
 
 ![1.png](images/1.png)
 
-### 
 
 ## from [Tinyrender](https://github.com/ssloy/tinyrenderer/wiki)
 
