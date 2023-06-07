@@ -1,0 +1,6 @@
+bin/
+lib/
+build/
+*.ppm
+gif/*.mp4
+.vscode/
