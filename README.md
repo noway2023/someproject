@@ -30,3 +30,13 @@ bug images :)
 ![render.png](images/render.png)
 
 ![zbuffer.png](images/zbuffer.png)
+
+### tinyraycaster
+
+fisheye distortion
+
+![caster.gif](tinyraycaster/gif/caster.gif)
+
+decrease fisheye distortion
+
+![caster2.gif](tinyraycaster/gif/caster2.gif)
