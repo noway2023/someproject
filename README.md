@@ -22,7 +22,6 @@ bug images :)
 
 ![1.png](images/1.png)
 
-
 ## from [Tinyrender](https://github.com/ssloy/tinyrenderer/wiki)
 
 ### tinyrender
@@ -35,8 +34,8 @@ bug images :)
 
 fisheye distortion
 
-![caster.gif](tinyraycaster/gif/caster.gif)
+![caster.gif](images/caster.gif)
 
 decrease fisheye distortion
 
-![caster2.gif](tinyraycaster/gif/caster2.gif)
+![caster2.gif](images/caster2.gif)
