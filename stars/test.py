@@ -31,7 +31,7 @@ def rand3():
 def project(pos_3d):
     center = ti.Vector(res) / 2
     w = FOV_tan * pos_3d.z
-    pos_2d = (ti.Vector([pos_3d.x, pos_3d.y]) - center) / w * res[1] + center
+    pos_2d = (ti.Vector([pos_3d.x, pos_3d.y]) - center) / w * center[1] + center
     return pos_2d
     
 @ti.func
