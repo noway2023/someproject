@@ -63,12 +63,18 @@ bool scene_intersect(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, Materi
     return sphere_dis<1000;
 }
 
-uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vector<Vec3f> &lights){
+uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vector<Vec3f> &lights, size_t depth=0){
     Material material;
     Vec3f normal, point;
-    if(!scene_intersect(pos, dir, sphere, material, point, normal)){
+    if(depth > 4 || !scene_intersect(pos, dir, sphere, material, point, normal)){
         return pack_color(0.2*255, 0.7*255, 0.8*255); 
     }
+    Vec3f reflect_dir = reflect(dir, normal).normalize();
+    Vec3f reflect_orig = reflect_dir*normal < 0 ? point - normal*1e-3 : point + normal*1e-3; 
+    uint32_t reflect_color = cast_ray(reflect_orig, reflect_dir, sphere, lights, depth + 1);
+    uint8_t rr, rg, rb, ra;
+    unpack_color(reflect_color, rr, rg, rb, ra);
+    float rrf = rr/255., rgf = rg/255., rbf = rb/255.;
     uint8_t r, g, b, a;
     unpack_color(material.diffuse_color, r, g, b, a);
     float diffuse_light_intensity = 0,specular_light_intensity=0, shadow_intensity = 0;
@@ -87,9 +93,12 @@ uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vect
     }
     
     float rf = r/255., gf = g/255., bf = b/255.;
-    rf = rf*diffuse_light_intensity*material.albedo[0] + 1.*specular_light_intensity*material.albedo[1];
-    gf = gf*diffuse_light_intensity*material.albedo[0] + 1.*specular_light_intensity*material.albedo[1];
-    bf = bf*diffuse_light_intensity*material.albedo[0] + 1.*specular_light_intensity*material.albedo[1];
+    float diffuse_coff = diffuse_light_intensity*material.albedo[0];
+    float spec_coff = specular_light_intensity*material.albedo[1];
+    float reflect_coff = material.albedo[2]+material.albedo[3];
+    rf = rf*diffuse_coff + 1.*spec_coff + rrf*reflect_coff ;
+    gf = gf*diffuse_coff + 1.*spec_coff + rgf*reflect_coff ;
+    bf = bf*diffuse_coff + 1.*spec_coff + rbf*reflect_coff ;
     float maxf = std::max(std::max(rf, bf),gf);
     if(maxf<=1.0) maxf = 1.0;
     r = (255 * std::max(0.f, std::min(1.f, rf/maxf)));
@@ -125,9 +134,9 @@ int main(){
     Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), pack_color(1.0*255, 1.0*255, 1.0*255), 1425.);
     std::vector<Sphere> sp = {
         Sphere(Vec3f(-3.,    0.,   -16.), 2, ivory),
-        Sphere(Vec3f(-1.0, -1.5, -12.), 2, red_rubber),
+        Sphere(Vec3f(-1.0, -1.5, -12.), 2, mirror),
         Sphere(Vec3f(1.5, -0.5, -18.), 3, red_rubber),
-        Sphere(Vec3f(7.,    5.,   -18.), 4, ivory)
+        Sphere(Vec3f(7.,    5.,   -18.), 4, glass)
     };
     std::vector<Vec3f> light = {
         Vec3f(-20., 20., 20.),
