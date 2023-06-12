@@ -11,6 +11,7 @@
 const uint32_t red = 255;
 const uint32_t green = 255<<8;
 const uint32_t blue = 255<<16;
+const uint32_t yellow = red + green;
 const uint32_t white = red + blue + green;
 
 struct Material {
@@ -49,6 +50,21 @@ Vec3f reflect(Vec3f eye, Vec3f normal){
     return eye - normal*2.*(eye * normal);
 
 }
+
+Vec3f refract(Vec3f eye, Vec3f normal, float frac = 0.9){
+    float c = -normal*eye;
+    float r = (c<0)?frac:1./frac;
+    float k = 1 - r*r*(1-c*c);
+    if(c<0){
+        c = -c;
+        normal = -normal;
+        return (k<0)? Vec3f(0.,0.,0.):eye * r + normal*(r*c -std::sqrt(k));
+    }
+    else{
+        return (k<0)? Vec3f(0.,0.,0.):eye * r + normal*(r*c -std::sqrt(k));
+    }
+}
+
 bool scene_intersect(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, Material &material,Vec3f &hit, Vec3f &normal){
     float sphere_dis = std::numeric_limits<float>::max();
     for(size_t i=0;i<sphere.size();i++){
@@ -60,7 +76,19 @@ bool scene_intersect(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, Materi
             material = sphere[i].material;
         }
     }
-    return sphere_dis<1000;
+
+    float checkplane_dis = std::numeric_limits<float>::max();
+    if(fabs(dir.y)>1e-3){
+        float d = -(pos.y+4.)/dir.y;
+        Vec3f point = pos+dir*d;
+        if(d>0 && fabs(point.x)<10 && point.z<-10 && point.z>-30 && d < sphere_dis){
+            hit = point;
+            normal = Vec3f(0.,1.,0.);
+            checkplane_dis = d;
+            material.diffuse_color = (((int)(hit.x/2.+1000) +(int)(hit.z/2.)) &1)? blue + green:white;
+        }
+    }
+    return std::min(sphere_dis,checkplane_dis)<1000;
 }
 
 uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vector<Vec3f> &lights, size_t depth=0){
@@ -69,9 +97,18 @@ uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vect
     if(depth > 4 || !scene_intersect(pos, dir, sphere, material, point, normal)){
         return pack_color(0.2*255, 0.7*255, 0.8*255); 
     }
+
     Vec3f reflect_dir = reflect(dir, normal).normalize();
     Vec3f reflect_orig = reflect_dir*normal < 0 ? point - normal*1e-3 : point + normal*1e-3; 
     uint32_t reflect_color = cast_ray(reflect_orig, reflect_dir, sphere, lights, depth + 1);
+
+    Vec3f refract_dir = refract(dir, normal, material.refractive_index).normalize();
+    Vec3f refract_orig = refract_dir*normal < 0 ? point - normal*1e-3 : point + normal*1e-3; 
+    uint32_t refract_color = cast_ray(refract_orig, refract_dir, sphere, lights, depth + 1);
+
+    uint8_t fracr, fracg, fracb, fraca;
+    unpack_color(refract_color, fracr, fracg, fracb, fraca);
+    float fracrf = fracr/255., fracgf = fracg/255., fracbf = fracb/255.;
     uint8_t rr, rg, rb, ra;
     unpack_color(reflect_color, rr, rg, rb, ra);
     float rrf = rr/255., rgf = rg/255., rbf = rb/255.;
@@ -95,10 +132,11 @@ uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vect
     float rf = r/255., gf = g/255., bf = b/255.;
     float diffuse_coff = diffuse_light_intensity*material.albedo[0];
     float spec_coff = specular_light_intensity*material.albedo[1];
-    float reflect_coff = material.albedo[2]+material.albedo[3];
-    rf = rf*diffuse_coff + 1.*spec_coff + rrf*reflect_coff ;
-    gf = gf*diffuse_coff + 1.*spec_coff + rgf*reflect_coff ;
-    bf = bf*diffuse_coff + 1.*spec_coff + rbf*reflect_coff ;
+    float reflect_coff = material.albedo[2];
+    float refract_coff = material.albedo[3];
+    rf = rf*diffuse_coff + 1.*spec_coff + rrf*reflect_coff + fracrf*refract_coff;
+    gf = gf*diffuse_coff + 1.*spec_coff + rgf*reflect_coff + fracgf*refract_coff;
+    bf = bf*diffuse_coff + 1.*spec_coff + rbf*reflect_coff + fracbf*refract_coff;
     float maxf = std::max(std::max(rf, bf),gf);
     if(maxf<=1.0) maxf = 1.0;
     r = (255 * std::max(0.f, std::min(1.f, rf/maxf)));
@@ -134,9 +172,9 @@ int main(){
     Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), pack_color(1.0*255, 1.0*255, 1.0*255), 1425.);
     std::vector<Sphere> sp = {
         Sphere(Vec3f(-3.,    0.,   -16.), 2, ivory),
-        Sphere(Vec3f(-1.0, -1.5, -12.), 2, mirror),
+        Sphere(Vec3f(-1.0, -1.5, -12.), 2, glass),
         Sphere(Vec3f(1.5, -0.5, -18.), 3, red_rubber),
-        Sphere(Vec3f(7.,    5.,   -18.), 4, glass)
+        Sphere(Vec3f(7.,    5.,   -18.), 4, mirror)
     };
     std::vector<Vec3f> light = {
         Vec3f(-20., 20., 20.),
@@ -151,12 +189,3 @@ int main(){
     save_ppm("out.ppm", framebuffer, width, height);
     return 0;
 }
-
-//-0.727692  0.545591
-//-1.33203  0.998698 1
-
-//00000000000000001111111111111111
-//0.2 0.7 0.8 0.727692  0.545591
-//0.727692  0.545591 (0.538337, 0.403621, -0.739786)//
-//(-0.727692, 0.545591, -1)  0.538337 0.403621 -0.739786
-//(-0.727692, 0.545591, -1)  0.538337, 0.433026, -0.822741

@@ -7,6 +7,9 @@
 #include <cmath>
 #include <sstream>
 #include <iomanip>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 
 const uint32_t red = 255;
 const uint32_t green = 255<<8;
