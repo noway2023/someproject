@@ -128,7 +128,9 @@ uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vect
     Vec3f normal, point;
     if(depth > 4 || !scene_intersect(pos, dir, sphere, material, point, normal)){
         int a = std::min(scene_w-1, std::max(0, (int)((atan2(dir.z, dir.x)/(2*M_PI)+0.5)*scene_w)));
-        int b = std::min(scene_h-1, std::max(0, (int)((acos(dir.y)/M_PI)*scene_h)));
+        int b = std::min(scene_h-1, std::max(0, (int)((asin(-dir.y)/M_PI+0.5)*scene_h)));
+        //int b = std::min(scene_h-1, std::max(0, (int)((atan2(dir.z, dir.y)/(2*M_PI)+0.5)*scene_h)));
+        //int a = std::min(scene_w-1, std::max(0, (int)((acos(dir.x)/M_PI)*scene_w)));
         return scene[a+b*scene_w];
         //return color;
         //return pack_color(0.2*255, 0.7*255, 0.8*255); 
