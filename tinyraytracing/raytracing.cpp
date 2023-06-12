@@ -7,12 +7,44 @@
 #include "geometry.h"
 #include <cassert>
 #include <bitset>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 const uint32_t red = 255;
 const uint32_t green = 255<<8;
 const uint32_t blue = 255<<16;
 const uint32_t yellow = red + green;
 const uint32_t white = red + blue + green;
+
+int n_channal,scene_w,scene_h;
+bool load_texture(const std::string &filename, std::vector<uint32_t> &texture_map, const int width, const int height, std::vector<uint32_t> &scene){
+    unsigned char* pixmap = stbi_load(filename.c_str(), &scene_w,&scene_h,&n_channal,0);
+    if(!pixmap){
+        std::cerr<<"   error open file "<<std::endl;
+        return false;
+    }
+
+    if(3!=n_channal){
+        std::cerr<<" load error format"<<std::endl;
+        return false;
+    }
+    scene.resize(scene_w*scene_h);
+    int middle = (scene_w/2+scene_h/2*scene_w)*n_channal;
+    for(size_t j =0;j<scene_h;j++){
+        for(size_t i=0;i<scene_w;i++){
+
+            if(j<height && i<width){
+                uint8_t r = pixmap[(i+j*scene_w)*n_channal+0 + middle];
+                uint8_t g = pixmap[(i+j*scene_w)*n_channal+1 + middle];
+                uint8_t b = pixmap[(i+j*scene_w)*n_channal+2 + middle];
+                texture_map[i+j*width] = pack_color(r,g,b);
+            }
+            scene[i+j*scene_w] = pack_color(pixmap[(i+j*scene_w)*n_channal+0], pixmap[(i+j*scene_w)*n_channal+1], pixmap[(i+j*scene_w)*n_channal+2]);
+        }
+    }
+    stbi_image_free(pixmap);
+    return true;
+}
 
 struct Material {
     Material(const float r, const Vec4f &a, const uint32_t &color, const float spec) : refractive_index(r), albedo(a), diffuse_color(color), specular_exponent(spec) {}
@@ -91,20 +123,24 @@ bool scene_intersect(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, Materi
     return std::min(sphere_dis,checkplane_dis)<1000;
 }
 
-uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vector<Vec3f> &lights, size_t depth=0){
+uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vector<Vec3f> &lights, uint32_t &color, std::vector<uint32_t> &scene,size_t depth=0){
     Material material;
     Vec3f normal, point;
     if(depth > 4 || !scene_intersect(pos, dir, sphere, material, point, normal)){
-        return pack_color(0.2*255, 0.7*255, 0.8*255); 
+        int a = std::min(scene_w-1, std::max(0, (int)((atan2(dir.z, dir.x)/(2*M_PI)+0.5)*scene_w)));
+        int b = std::min(scene_h-1, std::max(0, (int)((acos(dir.y)/M_PI)*scene_h)));
+        return scene[a+b*scene_w];
+        //return color;
+        //return pack_color(0.2*255, 0.7*255, 0.8*255); 
     }
 
     Vec3f reflect_dir = reflect(dir, normal).normalize();
     Vec3f reflect_orig = reflect_dir*normal < 0 ? point - normal*1e-3 : point + normal*1e-3; 
-    uint32_t reflect_color = cast_ray(reflect_orig, reflect_dir, sphere, lights, depth + 1);
+    uint32_t reflect_color = cast_ray(reflect_orig, reflect_dir, sphere, lights, color, scene, depth + 1);
 
     Vec3f refract_dir = refract(dir, normal, material.refractive_index).normalize();
     Vec3f refract_orig = refract_dir*normal < 0 ? point - normal*1e-3 : point + normal*1e-3; 
-    uint32_t refract_color = cast_ray(refract_orig, refract_dir, sphere, lights, depth + 1);
+    uint32_t refract_color = cast_ray(refract_orig, refract_dir, sphere, lights, color, scene, depth + 1);
 
     uint8_t fracr, fracg, fracb, fraca;
     unpack_color(refract_color, fracr, fracg, fracb, fraca);
@@ -146,7 +182,7 @@ uint32_t cast_ray(Vec3f &pos, Vec3f &dir, std::vector<Sphere> &sphere, std::vect
 
 }
 
-void render(std::vector<uint32_t>& image, std::vector<Sphere>& spheres, std::vector<Vec3f> lights, float &tanfov, uint32_t w, uint32_t h){
+void render(std::vector<uint32_t>& image, std::vector<Sphere>& spheres, std::vector<Vec3f> lights, float &tanfov, uint32_t w, uint32_t h, std::vector<uint32_t>& scene){
     #pragma omp parallel for
     for(size_t i=0;i<w;i++){
         for(size_t j=0;j<h;j++){
@@ -154,17 +190,21 @@ void render(std::vector<uint32_t>& image, std::vector<Sphere>& spheres, std::vec
             float dx = (2*(i+0.5)/(float)w -1) * tanfov * w / (float)h;
             float dy = -(2*(j+0.5)/(float)h -1) * tanfov;
             Vec3f dir = Vec3f(dx, dy, -1).normalize();
-            image[j*w+i] = cast_ray(Vec3f(0.,0.,0.), dir, spheres, lights);
+            image[j*w+i] = cast_ray(Vec3f(0.,0.,0.), dir, spheres, lights, image[j*w+i], scene);
         }
     }
 }
 
 int main(){
-    constexpr uint32_t width = 1024;
-    constexpr uint32_t height = 768;
+    constexpr int width = 1024;
+    constexpr int height = 768;
     constexpr int fov = M_PI/2.;
     float tanfov = tan(fov/2.);
     std::vector<uint32_t> framebuffer(width*height, 0);
+    std::vector<uint32_t> scenebuffer;
+    if(!load_texture("envmap.jpg", framebuffer, width, height, scenebuffer)){
+        return 0;
+    }
 
     Material      ivory(1.0, Vec4f(0.6,  0.3, 0.1, 0.0), pack_color(0.4*255, 0.4*255, 0.3*255),   50.);
     Material      glass(1.5, Vec4f(0.0,  0.5, 0.1, 0.8), pack_color(0.6*255, 0.7*255, 0.8*255),  125.);
@@ -183,7 +223,7 @@ int main(){
     };
 
 
-    render(framebuffer, sp, light, tanfov, width, height);
+    render(framebuffer, sp, light, tanfov, width, height, scenebuffer);
     
 
     save_ppm("out.ppm", framebuffer, width, height);
